@@ -1,0 +1,15 @@
+[build-system]
+requires = ["build>=1.2.2", "setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devops-python-demo"
+version = "1.0.0"
+description = "Python demo for DevOps questionnaire"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

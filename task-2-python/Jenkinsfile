@@ -1,0 +1,58 @@
+pipeline {
+  agent any
+  environment {
+    SONAR_SERVER = 'sonarqube-server'
+    SONAR_PROJECT_KEY = 'devops-python-app'
+    NEXUS_REGISTRY = 'nexus.example.com:8083'
+    JFROG_REGISTRY = 'company.jfrog.io'
+    IMAGE_NAME = 'devops-python-app'
+  }
+  stages {
+    stage('Checkout') { steps { checkout scm } }
+    stage('Test and Build Wheel') {
+      steps {
+        sh '''
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip build pytest
+          python -m pip install -e '.[test]'
+          pytest -q
+          python -m build --wheel
+        '''
+      }
+    }
+    stage('SonarQube') {
+      steps {
+        withSonarQubeEnv("${SONAR_SERVER}") {
+          sh 'sonar-scanner -Dsonar.projectKey="$SONAR_PROJECT_KEY" -Dsonar.sources=src -Dsonar.tests=tests'
+        }
+      }
+    }
+    stage('Docker Build') {
+      steps {
+        script { env.IMAGE_TAG = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim() }
+        sh 'docker build --pull -t "$IMAGE_NAME:$IMAGE_TAG" .'
+      }
+    }
+    stage('Publish Images') {
+      steps {
+        withCredentials([
+          usernamePassword(credentialsId: 'nexus-docker-creds', usernameVariable: 'NU', passwordVariable: 'NP'),
+          usernamePassword(credentialsId: 'jfrog-docker-creds', usernameVariable: 'JU', passwordVariable: 'JP')
+        ]) {
+          sh '''
+            set +x
+            echo "$NP" | docker login "$NEXUS_REGISTRY" -u "$NU" --password-stdin
+            docker tag "$IMAGE_NAME:$IMAGE_TAG" "$NEXUS_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+            docker push "$NEXUS_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+            docker logout "$NEXUS_REGISTRY"
+            echo "$JP" | docker login "$JFROG_REGISTRY" -u "$JU" --password-stdin
+            docker tag "$IMAGE_NAME:$IMAGE_TAG" "$JFROG_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+            docker push "$JFROG_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+            docker logout "$JFROG_REGISTRY"
+          '''
+        }
+      }
+    }
+  }
+}

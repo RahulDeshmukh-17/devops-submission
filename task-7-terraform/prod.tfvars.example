@@ -1,0 +1,4 @@
+environment = "prod"
+aws_region = "ap-south-1"
+project_name = "devops-questionnaire"
+ssh_allowed_cidr = ""
